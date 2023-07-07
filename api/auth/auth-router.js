@@ -1,8 +1,31 @@
-const router = require('express').Router();
+const router = require("express").Router();
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { JWT_SECRET, HASH_ROUND } = require("../secrets"); // bu secret'ı kullanın!
+const User = require("../users/users-model");
+const restrict = require("../middleware/restricted.js");
+const usernameVarmi = require("../middleware/usernameVarmi");
+const usernameTaken = require("../middleware/usernameTaken");
+const payloadCheck = require("../middleware/payloadCheck");
 
-router.post('/register', (req, res) => {
-  res.end('kayıt olmayı ekleyin, lütfen!');
-  /*
+router.post(
+  "/register",
+  payloadCheck,
+  usernameTaken,
+  async (req, res, next) => {
+    const { username, password } = req.body;
+    try {
+      const hashedPassword = bcrypt.hashSync(password, HASH_ROUND);
+      const user = await User.ekle({
+        username: username,
+        password: hashedPassword,
+      });
+      res.status(201).json(user);
+    } catch (error) {
+      next(error);
+    }
+
+    /*
     EKLEYİN
     Uçnoktanın işlevselliğine yardımcı olmak için middlewarelar yazabilirsiniz.
     2^8 HASH TURUNU AŞMAYIN!
@@ -27,10 +50,26 @@ router.post('/register', (req, res) => {
     4- Kullanıcı adı alınmışsa BAŞARISIZ kayıtta,
       şu mesajı içermelidir: "username alınmış".
   */
-});
+  }
+);
 
-router.post('/login', (req, res) => {
-  res.end('girişi ekleyin, lütfen!');
+router.post("/login", payloadCheck, usernameVarmi, async (req, res) => {
+  const { password } = req.body;
+  const user = res.user;
+  if (bcrypt.compareSync(password, user.password)) {
+    const payload = {
+      id: user.id,
+      username: user.username,
+    };
+    const options = {
+      expiresIn: "24h",
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, options);
+    res.json({ message: `welcome ${user.username}`, token: token });
+  } else {
+    next({ status: 401, message: "Gecersiz kriter" });
+  }
   /*
     EKLEYİN
     Uçnoktanın işlevselliğine yardımcı olmak için middlewarelar yazabilirsiniz.
