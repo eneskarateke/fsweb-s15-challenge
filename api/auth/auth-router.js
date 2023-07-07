@@ -3,7 +3,6 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET, HASH_ROUND } = require("../secrets"); // bu secret'ı kullanın!
 const User = require("../users/users-model");
-const restrict = require("../middleware/restricted.js");
 const usernameVarmi = require("../middleware/usernameVarmi");
 const usernameTaken = require("../middleware/usernameTaken");
 const payloadCheck = require("../middleware/payloadCheck");
@@ -13,13 +12,14 @@ router.post(
   payloadCheck,
   usernameTaken,
   async (req, res, next) => {
-    const { username, password } = req.body;
+    const { username } = req.body;
+
     try {
-      const hashedPassword = bcrypt.hashSync(password, HASH_ROUND);
       const user = await User.ekle({
         username: username,
-        password: hashedPassword,
+        password: req.hashedPassword,
       });
+
       res.status(201).json(user);
     } catch (error) {
       next(error);
@@ -53,20 +53,21 @@ router.post(
   }
 );
 
-router.post("/login", payloadCheck, usernameVarmi, async (req, res) => {
+router.post("/login", payloadCheck, usernameVarmi, (req, res, next) => {
   const { password } = req.body;
-  const user = res.user;
-  if (bcrypt.compareSync(password, user.password)) {
+
+  if (req.user && bcrypt.compareSync(password, req.user.password)) {
     const payload = {
-      id: user.id,
-      username: user.username,
+      id: req.user.id,
+      username: req.user.username,
+      password: req.user.password,
     };
     const options = {
       expiresIn: "24h",
     };
 
     const token = jwt.sign(payload, JWT_SECRET, options);
-    res.json({ message: `welcome ${user.username}`, token: token });
+    res.json({ message: `welcome ${req.user.username}`, token: token });
   } else {
     next({ status: 401, message: "Gecersiz kriter" });
   }

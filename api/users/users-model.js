@@ -9,7 +9,7 @@ function goreBul(filtre) {
 }
 
 function idyeGoreBul(id) {
-  return db("users").where("users.id", id).first();
+  return db("users").select("id", "username").where("id", id).first();
 }
 
 async function ekle(payload) {
