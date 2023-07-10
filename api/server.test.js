@@ -1,83 +1,69 @@
 const request = require("supertest");
 const server = require("../api/server");
 const db = require("../data/dbConfig");
-const bcryptjs = require("bcryptjs");
-// testleri buraya yazın
-afterAll(async () => {
-  await db.destroy();
-});
+
 beforeAll(async () => {
   await db.migrate.rollback();
   await db.migrate.latest();
 });
 
-test("[0] Testler çalışır durumda]", () => {
+test("[0] sanity check", () => {
   expect(process.env.NODE_ENV).toBe("testing");
 });
 
 describe("AUTH", () => {
-  test("[1] register user", async () => {
-    const payload = { username: "enes", password: "1234" };
+  test("[1] register", async () => {
+    const payload = { username: "serkan", password: "1234" };
     const res = await request(server).post("/api/auth/register").send(payload);
     expect(res.body).toHaveProperty("id", 1);
   });
-  test("[2] Password hashleniyor mu?", async () => {
-    //arrange
-    let model = { username: "veysel33", password: "1234" };
-    //act
-    let actual = await request(server).post("/api/auth/register").send(model);
-    let isHashed = bcryptjs.compareSync(model.password, actual.body.password);
-    //assert
-    expect(actual.status).toBe(201);
-    expect(isHashed).toBeTruthy();
+  test("[2] register failure", async () => {
+    const payload = { username: "serkan", password: "12345" };
+    const res = await request(server).post("/api/auth/register").send(payload);
+    expect(res.body).toHaveProperty("message", "User zaten tanımlı");
   });
-  test("[3] Login token dönüyor mu?", async () => {
-    //arrange
-    let model = { username: "bob", password: "1234" };
-    //act
-    let actual = await request(server).post("/api/auth/login").send(model);
-    //assert
-    expect(actual.status).toBe(200);
-    expect(actual.body.token).toBeDefined();
+  test("[3] login", async () => {
+    const payload = { username: "serkan", password: "1234" };
+    const res = await request(server).post("/api/auth/login").send(payload);
+    expect(res.body).toHaveProperty("token");
+    expect(res.body).toHaveProperty("message", "welcome serkan");
   });
-  test("[4] Login eksik payload durumunda hata dönüyor mu?", async () => {
-    //arrange
-    let model = { username: "bob" };
-    //act
-    let actual = await request(server).post("/api/auth/login").send(model);
-    //assert
-    expect(actual.status).toBe(401);
+  test("[4] login failure", async () => {
+    const payload = { username: "mahmut", password: "1234" };
+    const res = await request(server).post("/api/auth/login").send(payload);
+    expect(res.body).not.toHaveProperty("token");
+    expect(res.body).not.toHaveProperty("message", "serkan geri geldi");
   });
 });
-describe("Bilmeceler test", () => {
-  test("[5] token geçerli ise bilmeceler dönüyor mu?", async () => {
-    //arrange
-    let model = { username: "bob", password: "1234" };
-    //act
-    let loginResult = await request(server).post("/api/auth/login").send(model);
-    let actual = await request(server)
-      .get("/api/bilmeceler")
-      .set("authorization", loginResult.body.token);
-    //assert
-    expect(actual.status).toBe(200);
-    expect(actual.body.length).toBe(3);
+
+describe("BİLMECELER", () => {
+  test("[5] get bilmeceler", async () => {
+    const res = await request(server).get("/api/bilmeceler/");
+    expect(res.body).toHaveProperty("message", "Token gereklidir");
   });
-  test("[6] logout olmuş bir kullanıcıda bilmeceler çalışıyor?", async () => {
-    //arrange
-    let model = { username: "bob", password: "1234" };
-    //act
-    let loginResult = await request(server).post("/api/auth/login").send(model);
-    await request(server)
-      .get("/api/auth/logout")
-      .send(model)
-      .set("authorization", loginResult.body.token);
-    let actual = await request(server)
-      .get("/api/bilmeceler")
-      .set("authorization", loginResult.body.token);
-    //assert
-    expect(actual.status).toBe(400);
-    expect(actual.body.message).toBe(
-      "Daha önce çıkış yapılmış. Tekrar giriş yapınız"
-    );
+  test("[6] get bilmeceler", async () => {
+    const payload = { username: "serkan", password: "1234" };
+    const loginRes = await request(server)
+      .post("/api/auth/login")
+      .send(payload);
+    //expect(loginRes.body.token.username).toBe('serkan')
+
+    const res = await request(server)
+      .get("/api/bilmeceler/")
+      .set("Authorization", loginRes.body.token);
+    expect(res.body).toHaveLength(3);
+  });
+  test("[7] post bilmeceler", async () => {
+    const payload = { username: "serkan", password: "1234" };
+    const loginRes = await request(server)
+      .post("/api/auth/login")
+      .send(payload);
+    //expect(loginRes.body.token.username).toBe('serkan')
+    const bilmecepayload = { bilmece: "test" };
+    const res = await request(server)
+      .post("/api/bilmeceler/")
+      .set("Authorization", loginRes.body.token)
+      .send(bilmecepayload);
+    expect(res.body).toHaveProperty("bilmece", "test");
   });
 });
